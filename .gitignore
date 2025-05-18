@@ -1,0 +1,12 @@
+runs/
+data_temp/
+wandb/
+
+.idea/
+
+*.pyc
+*.egg-info
+**/__pycache__
+**/dist
+
+**/.DS_Store

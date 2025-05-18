@@ -1,0 +1,101 @@
+setup:
+  seed: 42
+  experiment_name: DETR_COCO
+  run_name: Base
+  ckpt_path: null
+
+logger:
+  name: TerminalLogger
+  description: ""
+  params: { }
+
+trainer:
+  accelerator: cuda
+  max_epochs: &epochs 300
+  limit_batches: -1
+  default_device_id: 0
+
+model:
+  name: DETR
+  num_classes: &num_classes 91 # max_obj_id + 1 (`no_object` id), COCO has 80 classes but max_obj_id is 90
+  num_queries: 100 # number of object queries, for COCO recommend is 100
+  aux_loss: True
+  backbone:
+    name: resnet50
+    num_channels: 2048 # resnet50 - 2048, resnet18, resnet34 - 512
+    train_backbone: True
+    pretrained: True
+    return_interm_layers: False
+    dilation: False
+  transformer:
+    hidden_dim: 256
+    num_heads: 8
+    num_encoder_layers: 6
+    num_decoder_layers: &num_decoder_layers 6
+    dim_feedforward: 2048
+    dropout: 0.1
+    pre_norm: False
+    return_intermediate_dec: True
+
+dataloader:
+  dataset: COCODataset
+  split: null # used only for evaluation
+  dataset_args: { }
+  batch_size: 2
+  pin_memory: True
+  num_workers: 8
+  shuffle: True
+  drop_last: True
+
+optimizer:
+  name: AdamW
+  params:
+    lr: 0.0001
+    weight_decay: 0.0001
+  lr_backbone: 0.00001
+
+loss:
+  name: &loss_fn DETRLoss
+  params: &loss_fn_params
+    num_classes: *num_classes
+    num_decoder_layers: *num_decoder_layers
+    loss_ce: 1
+    loss_bbox: 5
+    loss_giou: 2
+    eos_coef: 0.1
+    aux_loss: True
+    losses:
+      - labels
+      - boxes
+      - cardinality
+    matcher_params:
+      cost_class: 1
+      cost_bbox: 5
+      cost_giou: 2
+
+lr_scheduler:
+  name: StepLR
+  interval: epoch
+  params:
+    step_size: 2
+
+metrics:
+  - DETRLossMetric:
+      loss_fn: *loss_fn
+      loss_fn_params: *loss_fn_params
+  - DETRMeanAveragePrecision:
+      box_format: xyxy
+      iou_type: bbox
+
+callbacks:
+  - ModelCheckpoint:
+      monitor: detrloss
+      stage: val
+      mode: min
+      save_last: True
+  - ModelSummary:
+      depth: 5
+  - MetricsSaverCallback: { }
+  - ResultsPlotterCallback:
+      ncols: 5
+      max_n: 25
